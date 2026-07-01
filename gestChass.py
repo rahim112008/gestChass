@@ -23,7 +23,7 @@ import string
 # ---------------------------
 # 1. CONFIGURATION & CONSTANTES
 # ---------------------------
-st.set_page_config(page_title="GestaChasse", layout="wide")
+st.set_page_config(page_title="GestaChasse - Algérie", layout="wide")
 
 # Admin (remplacer par votre email)
 ADMIN_EMAIL = "votre_email@domaine.com"
@@ -99,7 +99,7 @@ TEXTS = {
         'post_ad': 'Déposer une annonce',
         'title': 'Titre',
         'description': 'Description',
-        'price': 'Prix (€)',
+        'price': 'Prix (DZD)',
         'category': 'Catégorie',
         'contact': 'Email de contact',
         'clothing': 'Vêtement',
@@ -139,6 +139,9 @@ TEXTS = {
         'positive': 'Positif',
         'negative': 'Négatif',
         'daily_evolution': 'Évolution quotidienne',
+        'seed_data': '🌱 Générer des données de démonstration (Algérie)',
+        'seed_success': 'Données de démonstration générées avec succès !',
+        'seed_error': 'Erreur lors de la génération des données.',
     },
     'en': {
         'app_name': 'GestaChasse',
@@ -189,7 +192,7 @@ TEXTS = {
         'post_ad': 'Post ad',
         'title': 'Title',
         'description': 'Description',
-        'price': 'Price (€)',
+        'price': 'Price (DZD)',
         'category': 'Category',
         'contact': 'Contact email',
         'clothing': 'Clothing',
@@ -229,6 +232,9 @@ TEXTS = {
         'positive': 'Positive',
         'negative': 'Negative',
         'daily_evolution': 'Daily evolution',
+        'seed_data': '🌱 Generate demo data (Algeria)',
+        'seed_success': 'Demo data generated successfully!',
+        'seed_error': 'Error generating demo data.',
     },
     'ar': {
         'app_name': 'غيستاشاس',
@@ -279,7 +285,7 @@ TEXTS = {
         'post_ad': 'نشر إعلان',
         'title': 'العنوان',
         'description': 'الوصف',
-        'price': 'السعر (€)',
+        'price': 'السعر (دج)',
         'category': 'التصنيف',
         'contact': 'بريد التواصل',
         'clothing': 'ملابس',
@@ -319,6 +325,9 @@ TEXTS = {
         'positive': 'إيجابي',
         'negative': 'سلبي',
         'daily_evolution': 'التطور اليومي',
+        'seed_data': '🌱 إنشاء بيانات تجريبية (الجزائر)',
+        'seed_success': 'تم إنشاء البيانات التجريبية بنجاح!',
+        'seed_error': 'خطأ في إنشاء البيانات التجريبية.',
     }
 }
 
@@ -616,7 +625,134 @@ def recommend_spots(df):
     return centers, counts
 
 # ---------------------------
-# 10. INIT SESSION
+# 10. FONCTION DE PEUPLEMENT (DÉMONSTRATION ALGÉRIE)
+# ---------------------------
+def seed_demo_data():
+    """Insère des données de démonstration adaptées à l'Algérie."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    
+    # Espèces algériennes
+    especes_algerie = [
+        "Sanglier", "Gazelle de Cuvier", "Mouflon à manchettes", "Lièvre du Cap",
+        "Renard roux", "Chacal doré", "Hyène rayée", "Chat sauvage d'Afrique",
+        "Perdrix gambra", "Perdrix de Sélin", "Faisan de chasse", "Pigeon ramier",
+        "Tourterelle des bois", "Caille des blés", "Canard colvert", "Sarcelle d'hiver",
+        "Foulque macroule", "Bécassine des marais", "Cigogne blanche", "Héron cendré"
+    ]
+    
+    # Régions d'Algérie avec coordonnées approximatives
+    regions_algerie = {
+        "Kabylie": (36.7, 4.1),
+        "Aurès": (35.3, 6.6),
+        "Sahara": (27.0, 3.0),
+        "Tell occidental": (35.5, 0.0),
+        "Hautes Plaines": (34.0, 4.0),
+        "Numidie": (36.9, 6.9),
+        "M’zab": (32.5, 3.7),
+        "Tassili n'Ajjer": (25.0, 9.0),
+        "Atlas saharien": (34.0, 2.0),
+        "Oranie": (35.7, -0.6)
+    }
+    
+    # Utilisateurs fictifs
+    usernames = [
+        "chasseur_kabyle", "sniper_sahara", "hunter_oran", "gazelle_hunter",
+        "aures_man", "numidien", "chasseur_blida", "tassili_fan"
+    ]
+    users = []
+    for username in usernames:
+        user_id = str(uuid.uuid4())
+        email = f"{username}@example.dz"
+        password = "chasse123"
+        hashed = hash_password(password)
+        created_at = (datetime.datetime.now() - datetime.timedelta(days=random.randint(0, 60))).isoformat()
+        c.execute("INSERT OR IGNORE INTO users VALUES (?, ?, ?, ?, ?)",
+                  (user_id, username, email, hashed, created_at))
+        users.append({"id": user_id, "username": username})
+        print(f"👤 Chasseur créé : {username}")
+    
+    # 40 observations
+    for _ in range(40):
+        region = random.choice(list(regions_algerie.keys()))
+        lat_base, lon_base = regions_algerie[region]
+        lat = lat_base + random.uniform(-0.5, 0.5)
+        lon = lon_base + random.uniform(-0.5, 0.5)
+        species = random.choice(especes_algerie)
+        gender = random.choice(["Mâle", "Femelle", "Indéterminé"])
+        notes = random.choice([
+            "Observé en bordure de forêt", "En groupe", "Solitaire", "Très actif",
+            "A proximité d'un point d'eau", "Dans une zone boisée", "En plaine",
+            "Près d'un oued", "En montagne", "Zone rocheuse"
+        ])
+        user = random.choice(users)
+        obs_id = str(uuid.uuid4())
+        date = (datetime.datetime.now() - datetime.timedelta(days=random.randint(0, 30))).date().isoformat()
+        time = f"{random.randint(5, 20):02d}:{random.randint(0, 59):02d}"
+        sentiment = random.uniform(-0.3, 0.9)
+        c.execute('''INSERT OR IGNORE INTO observations 
+            (id, user_id, date, time, species, gender, latitude, longitude,
+             location_description, photo_path, notes, created_at, sentiment)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (obs_id, user["id"], date, time, species, gender, lat, lon,
+             region, "", notes, datetime.datetime.now().isoformat(), sentiment))
+        print(f"📝 Observation : {species} - {region}")
+    
+    # Messages publics (arabe/français)
+    messages_publics = [
+        "السلام عليكم، هل من أحد رأى غزال في منطقة القبائل؟",
+        "Bonjour à tous, belle sortie hier dans l'Aurès.",
+        "شكراً لمنظمي هذا التطبيق، مفيد جداً.",
+        "Qui connaît un bon spot pour la perdrix dans l'Oranie ?",
+        "J'ai vu un mouflon près de Tassili, magnifique !",
+        "La saison de chasse s'annonce bien cette année.",
+        "أبحث عن رفيق للصيد في الصحراء.",
+        "Attention, sangliers nombreux en Kabylie en ce moment."
+    ]
+    for msg in messages_publics:
+        sender = random.choice(users)
+        c.execute("INSERT OR IGNORE INTO messages (sender_id, receiver_id, content, timestamp, is_public) VALUES (?, ?, ?, ?, ?)",
+                  (sender["id"], None, msg, datetime.datetime.now().isoformat(), True))
+    
+    # Messages privés
+    for _ in range(5):
+        sender = random.choice(users)
+        receiver = random.choice([u for u in users if u["id"] != sender["id"]])
+        content = random.choice([
+            "Salut, on va chasser ce week-end ?",
+            "J'ai repéré un bon endroit pour la gazelle.",
+            "Tu as des munitions en rab ?",
+            "Merci pour le partage de ton spot.",
+            "À bientôt, inchallah."
+        ])
+        c.execute("INSERT OR IGNORE INTO messages (sender_id, receiver_id, content, timestamp, is_public) VALUES (?, ?, ?, ?, ?)",
+                  (sender["id"], receiver["id"], content, datetime.datetime.now().isoformat(), False))
+    
+    # Annonces (prix en dinars)
+    annonces_data = [
+        {"title": "Jumelles 8x42", "desc": "Idéales pour la chasse en montagne.", "price": 12000, "category": "Jumelles"},
+        {"title": "Veste de chasse camo", "desc": "Taille M, adaptée aux climats chauds.", "price": 8500, "category": "Vêtement"},
+        {"title": "Appelant à perdrix", "desc": "Son très réaliste, fabriqué en Algérie.", "price": 2500, "category": "Appelant"},
+        {"title": "Carabine calibre 12", "desc": "État neuf, avec optique.", "price": 85000, "category": "Arme"},
+        {"title": "Sac à dos 30L", "desc": "Idéal pour les randonnées de chasse.", "price": 4500, "category": "Accessoire"},
+        {"title": "Bottes de chasse", "desc": "Hauteur 40 cm, imperméables.", "price": 9800, "category": "Accessoire"},
+    ]
+    for ann in annonces_data:
+        user = random.choice(users)
+        ann_id = str(uuid.uuid4())
+        c.execute('''INSERT OR IGNORE INTO annonces 
+            (id, user_id, title, description, price, category, photo_path, contact_email, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (ann_id, user["id"], ann["title"], ann["desc"], ann["price"],
+             ann["category"], "", f"{user['username']}@example.dz",
+             datetime.datetime.now().isoformat()))
+    
+    conn.commit()
+    conn.close()
+    return True
+
+# ---------------------------
+# 11. INIT SESSION
 # ---------------------------
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
@@ -627,7 +763,7 @@ if 'logged_in' not in st.session_state:
 apply_rtl()
 
 # ---------------------------
-# 11. PAGES AUTH
+# 12. PAGES AUTH
 # ---------------------------
 def login_page():
     st.title(f"{t('app_name')} - {t('login')}")
@@ -686,7 +822,7 @@ def logout():
     st.rerun()
 
 # ---------------------------
-# 12. PAGES PRINCIPALES
+# 13. PAGES PRINCIPALES
 # ---------------------------
 def show_observations_page():
     st.title(t('my_obs'))
@@ -759,7 +895,7 @@ def show_carte_page():
     else:
         center_lat = df['latitude'].mean()
         center_lon = df['longitude'].mean()
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=8)
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=6)
         for _, r in df.iterrows():
             popup = f"<b>{r['species']}</b><br>{t('gender')}: {r['gender']}<br>{r['date']} {r['time']}<br>{r['location_description']}"
             folium.Marker([r['latitude'], r['longitude']],
@@ -868,7 +1004,7 @@ def show_annonces_page():
                     st.image("https://via.placeholder.com/150.png?text=Photo", width=150)
             with c2:
                 st.subheader(a['title'])
-                st.write(f"**{t('category')}:** {a['category']} | **{t('price')}:** {a['price']} €")
+                st.write(f"**{t('category')}:** {a['category']} | **{t('price')}:** {a['price']} DZD")
                 st.write(a['description'])
                 st.write(f"**Vendeur:** {a['seller_name']} ({a['contact_email']})")
                 if a['user_id'] == st.session_state.user_id:
@@ -918,12 +1054,12 @@ def show_ia_recommendations_page():
     fig = px.density_mapbox(df, lat='latitude', lon='longitude', z='id',
                             radius=10,
                             center=dict(lat=df['latitude'].mean(), lon=df['longitude'].mean()),
-                            zoom=8, mapbox_style="stamen-terrain")
+                            zoom=6, mapbox_style="stamen-terrain")
     st.plotly_chart(fig, use_container_width=True)
     st.subheader(t('clustering'))
     centers, counts = recommend_spots(df)
     if centers is not None:
-        m = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=8)
+        m = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=6)
         for _, r in df.iterrows():
             folium.CircleMarker([r['latitude'], r['longitude']], radius=3, color='red', fill=True).add_to(m)
         for i, c in enumerate(centers):
@@ -936,6 +1072,19 @@ def show_ia_recommendations_page():
 def show_admin_page():
     st.title(t('admin'))
     st.warning(t('admin_zone'))
+    
+    # Bouton pour générer les données de démonstration
+    if st.button(t('seed_data')):
+        with st.spinner("Génération des données..."):
+            success = seed_demo_data()
+            if success:
+                st.success(t('seed_success'))
+                st.rerun()
+            else:
+                st.error(t('seed_error'))
+    
+    st.divider()
+    
     df = get_observations()
     if df.empty:
         st.info(t('no_data'))
@@ -954,7 +1103,7 @@ def show_admin_page():
                                f"users_{datetime.date.today()}.csv", "text/csv")
 
 # ---------------------------
-# 13. MAIN
+# 14. MAIN
 # ---------------------------
 def main():
     # Sélecteur de langue dans la sidebar
