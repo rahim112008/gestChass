@@ -48,7 +48,7 @@ USE_REAL_SMTP = False
 if 'lang' not in st.session_state:
     st.session_state.lang = 'fr'  # par défaut
 
-# Dictionnaire des traductions (extrait simplifié pour garder le code lisible)
+# Dictionnaire des traductions (extrait simplifié)
 TEXTS = {
     'fr': {
         'app_name': 'GestaChasse',
@@ -642,7 +642,7 @@ def login_page():
                 st.session_state.username = user[1]
                 st.session_state.email = user[2]
                 st.success(f"{t('welcome')} {username}!")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error(t('login_error'))
     with st.expander(t('forgot_password')):
@@ -683,7 +683,7 @@ def logout():
     for k in ['logged_in', 'user_id', 'username', 'email']:
         if k in st.session_state:
             del st.session_state[k]
-    st.experimental_rerun()
+    st.rerun()
 
 # ---------------------------
 # 12. PAGES PRINCIPALES
@@ -721,7 +721,7 @@ def show_observations_page():
                             'location_description': loc, 'photo_path': path, 'notes': notes}
                     save_observation(st.session_state.user_id, data)
                     st.success(t('success_save'))
-                    st.experimental_rerun()
+                    st.rerun()
     df = get_observations(st.session_state.user_id)
     if df.empty:
         st.info(t('no_data'))
@@ -749,7 +749,7 @@ def show_observations_page():
             if st.button(t('delete')):
                 delete_observation(sel, st.session_state.user_id)
                 st.success(t('success_save'))
-                st.experimental_rerun()
+                st.rerun()
 
 def show_carte_page():
     st.title(t('map'))
@@ -809,7 +809,7 @@ def show_chat_page():
             if st.form_submit_button(t('publish')):
                 if c:
                     send_message(st.session_state.user_id, None, c, True)
-                    st.experimental_rerun()
+                    st.rerun()
     with tab2:
         users = get_all_users()
         others = users[users['id'] != st.session_state.user_id]
@@ -828,7 +828,7 @@ def show_chat_page():
                     if st.form_submit_button(t('send_message')):
                         if c:
                             send_message(st.session_state.user_id, sel, c, False)
-                            st.experimental_rerun()
+                            st.rerun()
 
 def show_annonces_page():
     st.title(t('ads'))
@@ -854,7 +854,7 @@ def show_annonces_page():
                         path = fpath
                     create_annonce(st.session_state.user_id, title, desc, price, cat, path, contact)
                     st.success(t('success_save'))
-                    st.experimental_rerun()
+                    st.rerun()
     ads = get_annonces()
     if ads.empty:
         st.info(t('no_data'))
@@ -874,7 +874,7 @@ def show_annonces_page():
                 if a['user_id'] == st.session_state.user_id:
                     if st.button(t('delete'), key=f"del_{a['id']}"):
                         delete_annonce(a['id'], st.session_state.user_id)
-                        st.experimental_rerun()
+                        st.rerun()
             st.divider()
 
 def show_profile_page():
@@ -964,7 +964,7 @@ def main():
                                     index=list(lang_map.keys()).index(current_lang_name))
     if lang_map[selected] != st.session_state.lang:
         st.session_state.lang = lang_map[selected]
-        st.experimental_rerun()
+        st.rerun()
 
     if not st.session_state.logged_in:
         login_page()
