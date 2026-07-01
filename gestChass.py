@@ -17,17 +17,16 @@ import requests
 from textblob import TextBlob
 from sklearn.cluster import KMeans
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.applications.mobilenet_v2 import preprocess_input, decode_predictions
+import random
+import string
 
 # ---------------------------
 # 1. CONFIGURATION & CONSTANTES
 # ---------------------------
 st.set_page_config(page_title="GestaChasse", layout="wide")
 
-# Admin
-ADMIN_EMAIL = "votre_email@domaine.com"  # 🔑 Remplacez par votre email
+# Admin (remplacer par votre email)
+ADMIN_EMAIL = "votre_email@domaine.com"
 
 # Dossier upload
 UPLOAD_DIR = "uploads"
@@ -36,7 +35,7 @@ if not os.path.exists(UPLOAD_DIR):
 
 DB_NAME = "chasse.db"
 
-# SMTP (pour réinitialisation)
+# SMTP (pour réinitialisation) - désactivé par défaut (simulation)
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 SMTP_USER = "votre_email@gmail.com"
@@ -49,7 +48,7 @@ USE_REAL_SMTP = False
 if 'lang' not in st.session_state:
     st.session_state.lang = 'fr'  # par défaut
 
-# Dictionnaire des traductions
+# Dictionnaire des traductions (extrait simplifié pour garder le code lisible)
 TEXTS = {
     'fr': {
         'app_name': 'GestaChasse',
@@ -324,7 +323,6 @@ TEXTS = {
 }
 
 def t(key):
-    """Récupère la traduction selon la langue sélectionnée."""
     return TEXTS[st.session_state.lang].get(key, key)
 
 # ---------------------------
@@ -336,9 +334,7 @@ def apply_rtl():
         <style>
         .stApp { direction: rtl; }
         .stSidebar { direction: rtl; }
-        .stSelectbox, .stTextInput, .stNumberInput, .stTextArea, .stDateInput, .stTimeInput {
-            direction: rtl;
-        }
+        .stSelectbox, .stTextInput, .stNumberInput, .stTextArea, .stDateInput, .stTimeInput { direction: rtl; }
         .stButton button { width: 100%; }
         </style>
         """, unsafe_allow_html=True)
@@ -350,23 +346,51 @@ def init_db():
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY, username TEXT UNIQUE, email TEXT UNIQUE,
-        password_hash TEXT, created_at TEXT)''')
+        id TEXT PRIMARY KEY,
+        username TEXT UNIQUE,
+        email TEXT UNIQUE,
+        password_hash TEXT,
+        created_at TEXT
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS observations (
-        id TEXT PRIMARY KEY, user_id TEXT, date TEXT, time TEXT, species TEXT,
-        gender TEXT, latitude REAL, longitude REAL, location_description TEXT,
-        photo_path TEXT, notes TEXT, created_at TEXT, sentiment REAL,
-        FOREIGN KEY(user_id) REFERENCES users(id))''')
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        date TEXT,
+        time TEXT,
+        species TEXT,
+        gender TEXT,
+        latitude REAL,
+        longitude REAL,
+        location_description TEXT,
+        photo_path TEXT,
+        notes TEXT,
+        created_at TEXT,
+        sentiment REAL,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, sender_id TEXT, receiver_id TEXT,
-        content TEXT, timestamp TEXT, is_public BOOLEAN,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_id TEXT,
+        receiver_id TEXT,
+        content TEXT,
+        timestamp TEXT,
+        is_public BOOLEAN,
         FOREIGN KEY(sender_id) REFERENCES users(id),
-        FOREIGN KEY(receiver_id) REFERENCES users(id))''')
+        FOREIGN KEY(receiver_id) REFERENCES users(id)
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS annonces (
-        id TEXT PRIMARY KEY, user_id TEXT, title TEXT, description TEXT,
-        price REAL, category TEXT, photo_path TEXT, contact_email TEXT,
-        created_at TEXT, FOREIGN KEY(user_id) REFERENCES users(id))''')
-    # Migration sentiment
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        title TEXT,
+        description TEXT,
+        price REAL,
+        category TEXT,
+        photo_path TEXT,
+        contact_email TEXT,
+        created_at TEXT,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+    )''')
+    # Ajout de la colonne sentiment si elle n'existe pas (migration)
     try:
         c.execute("ALTER TABLE observations ADD COLUMN sentiment REAL")
     except sqlite3.OperationalError:
@@ -386,13 +410,24 @@ def verify_password(password, hashed):
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 def generate_random_password(length=8):
-    import random, string
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
 def send_email(to_email, subject, body):
     if USE_REAL_SMTP:
-        # Code SMTP réel (omis pour concision)
-        return True
+        try:
+            msg = MIMEMultipart()
+            msg['From'] = SMTP_USER
+            msg['To'] = to_email
+            msg['Subject'] = subject
+            msg.attach(MIMEText(body, 'plain'))
+            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(msg)
+            server.quit()
+            return True
+        except:
+            return False
     else:
         print(f"📧 Envoi à {to_email} | {subject}\n{body}")
         return True
@@ -467,9 +502,10 @@ def save_observation(user_id, data):
 def get_observations(user_id=None):
     conn = sqlite3.connect(DB_NAME)
     if user_id:
-        df = pd.read_sql_query("SELECT * FROM observations WHERE user_id = ? ORDER BY date DESC", conn, params=(user_id,))
+        df = pd.read_sql_query("SELECT * FROM observations WHERE user_id = ? ORDER BY date DESC, time DESC",
+                               conn, params=(user_id,))
     else:
-        df = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
+        df = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC, time DESC", conn)
     conn.close()
     return df
 
@@ -496,15 +532,18 @@ def get_messages(user_id, other_user_id=None):
     if other_user_id:
         df = pd.read_sql_query('''
             SELECT m.*, u.username as sender_name
-            FROM messages m JOIN users u ON m.sender_id = u.id
+            FROM messages m
+            JOIN users u ON m.sender_id = u.id
             WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
             ORDER BY timestamp ASC
         ''', conn, params=(user_id, other_user_id, other_user_id, user_id))
     else:
         df = pd.read_sql_query('''
             SELECT m.*, u.username as sender_name
-            FROM messages m JOIN users u ON m.sender_id = u.id
-            WHERE m.is_public = 1 ORDER BY timestamp ASC
+            FROM messages m
+            JOIN users u ON m.sender_id = u.id
+            WHERE m.is_public = 1
+            ORDER BY timestamp ASC
         ''', conn)
     conn.close()
     return df
@@ -516,7 +555,9 @@ def create_annonce(user_id, title, description, price, category, photo_path, con
     ann_id = str(uuid.uuid4())
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
-    c.execute('''INSERT INTO annonces VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+    c.execute('''INSERT INTO annonces 
+        (id, user_id, title, description, price, category, photo_path, contact_email, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
               (ann_id, user_id, title, description, price, category, photo_path, contact_email,
                datetime.datetime.now().isoformat()))
     conn.commit()
@@ -526,7 +567,8 @@ def get_annonces():
     conn = sqlite3.connect(DB_NAME)
     df = pd.read_sql_query('''
         SELECT a.*, u.username as seller_name
-        FROM annonces a JOIN users u ON a.user_id = u.id
+        FROM annonces a
+        JOIN users u ON a.user_id = u.id
         ORDER BY created_at DESC
     ''', conn)
     conn.close()
@@ -540,42 +582,30 @@ def delete_annonce(ann_id, user_id):
     conn.close()
 
 # ---------------------------
-# 9. FONCTIONS IA
+# 9. FONCTIONS IA (sans TensorFlow)
 # ---------------------------
-@st.cache_resource
-def load_model():
-    return MobileNetV2(weights='imagenet')
-
-model = load_model()
-
 def recognize_species_inaturalist(image_bytes):
+    """Appel à l'API iNaturalist pour la reconnaissance."""
     url = "https://api.inaturalist.org/v1/computervision/score_image"
     files = {'image': ('photo.jpg', image_bytes, 'image/jpeg')}
     try:
-        r = requests.post(url, files=files, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
+        response = requests.post(url, files=files, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            results = data.get('results', [])
             suggestions = []
-            for res in data.get('results', [])[:3]:
-                taxon = res.get('taxon', {})
+            for r in results[:3]:
+                taxon = r.get('taxon', {})
                 name = taxon.get('preferred_common_name', taxon.get('name', ''))
-                score = res.get('score', 0) * 100
+                score = r.get('score', 0) * 100
                 suggestions.append(f"{name} ({score:.1f}%)")
             return suggestions
     except:
         pass
     return None
 
-def recognize_species_local(image):
-    img = image.resize((224, 224))
-    x = tf.keras.preprocessing.image.img_to_array(img)
-    x = np.expand_dims(x, axis=0)
-    x = preprocess_input(x)
-    preds = model.predict(x, verbose=0)
-    decoded = decode_predictions(preds, top=3)[0]
-    return [f"{d[1]} ({d[2]*100:.1f}%)" for d in decoded]
-
 def recommend_spots(df):
+    """Clustering pour recommander des zones."""
     coords = df[['latitude', 'longitude']].dropna()
     if len(coords) < 3:
         return None, None
@@ -638,12 +668,14 @@ def login_page():
             if not new_user or not new_email or not new_pass:
                 st.error(t('error_fields'))
             elif new_pass != confirm:
-                st.error("Les mots de passe ne correspondent pas.")  # Pas traduit pour éviter bug
+                st.error("Les mots de passe ne correspondent pas.")
             elif not re.match(r"[^@]+@[^@]+\.[^@]+", new_email):
                 st.error("Email invalide.")
             else:
                 if create_user(new_user, new_email, new_pass):
                     st.success(t('register_success'))
+                    send_email(new_email, "Bienvenue sur GestaChasse",
+                               f"Bonjour {new_user},\nVotre compte a été créé.")
                 else:
                     st.error(t('register_error'))
 
@@ -694,8 +726,10 @@ def show_observations_page():
     if df.empty:
         st.info(t('no_data'))
     else:
-        st.dataframe(df[['date','time','species','gender','latitude','longitude','location_description','notes']], use_container_width=True)
-        sel = st.selectbox("Choisir", df['id'].tolist(),
+        st.subheader("Vos observations")
+        st.dataframe(df[['date','time','species','gender','latitude','longitude','location_description','notes']],
+                     use_container_width=True)
+        sel = st.selectbox("Choisir une observation", df['id'].tolist(),
                            format_func=lambda x: f"{df[df['id']==x]['date'].iloc[0]} - {df[df['id']==x]['species'].iloc[0]}")
         if sel:
             obs = df[df['id'] == sel].iloc[0]
@@ -723,11 +757,15 @@ def show_carte_page():
     if df.empty:
         st.info(t('no_data'))
     else:
-        m = folium.Map(location=[df['latitude'].mean(), df['longitude'].mean()], zoom_start=8)
+        center_lat = df['latitude'].mean()
+        center_lon = df['longitude'].mean()
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=8)
         for _, r in df.iterrows():
-            popup = f"<b>{r['species']}</b><br>{t('gender')}: {r['gender']}<br>{r['date']} {r['time']}"
-            folium.Marker([r['latitude'], r['longitude']], popup=folium.Popup(popup, max_width=300),
-                          tooltip=r['species'], icon=folium.Icon(color="red")).add_to(m)
+            popup = f"<b>{r['species']}</b><br>{t('gender')}: {r['gender']}<br>{r['date']} {r['time']}<br>{r['location_description']}"
+            folium.Marker([r['latitude'], r['longitude']],
+                          popup=folium.Popup(popup, max_width=300),
+                          tooltip=r['species'],
+                          icon=folium.Icon(color="red", icon="info-sign")).add_to(m)
         folium_static(m, width=1000, height=600)
 
 def show_stats_page():
@@ -738,20 +776,25 @@ def show_stats_page():
         return
     col1, col2 = st.columns(2)
     with col1:
-        fig = px.bar(df['species'].value_counts().reset_index().rename(columns={'index':'Espèce', 'species':'Nombre'}),
-                     x='Espèce', y='Nombre', color='Espèce', text='Nombre')
+        counts = df['species'].value_counts().reset_index()
+        counts.columns = ['Espèce', 'Nombre']
+        fig = px.bar(counts, x='Espèce', y='Nombre', color='Espèce', text='Nombre')
         st.plotly_chart(fig, use_container_width=True)
     with col2:
-        fig = px.pie(df['gender'].value_counts().reset_index().rename(columns={'index':'Sexe', 'gender':'Nombre'}),
-                     values='Nombre', names='Sexe')
+        counts = df['gender'].value_counts().reset_index()
+        counts.columns = ['Sexe', 'Nombre']
+        fig = px.pie(counts, values='Nombre', names='Sexe')
         st.plotly_chart(fig, use_container_width=True)
     if 'sentiment' in df.columns and not df['sentiment'].isna().all():
         st.subheader(t('sentiment_analysis'))
-        st.metric("Moyenne", f"{df['sentiment'].mean():.2f}")
-        st.plotly_chart(px.histogram(df, x='sentiment', nbins=20), use_container_width=True)
+        avg = df['sentiment'].mean()
+        st.metric("Sentiment moyen", f"{avg:.2f}", delta="Positif" if avg > 0 else "Négatif")
+        fig = px.histogram(df, x='sentiment', nbins=20)
+        st.plotly_chart(fig, use_container_width=True)
     df['date'] = pd.to_datetime(df['date'])
     daily = df.groupby(df['date'].dt.date).size().reset_index(name='Nombre')
-    st.plotly_chart(px.line(daily, x='date', y='Nombre', markers=True, title=t('daily_evolution')), use_container_width=True)
+    fig = px.line(daily, x='date', y='Nombre', markers=True, title=t('daily_evolution'))
+    st.plotly_chart(fig, use_container_width=True)
 
 def show_chat_page():
     st.title(t('chat'))
@@ -791,11 +834,11 @@ def show_annonces_page():
     st.title(t('ads'))
     with st.expander(f"➕ {t('post_ad')}"):
         with st.form("ad_form"):
-            title = st.text_input(t('title')+"*")
+            title = st.text_input(f"{t('title')}*")
             desc = st.text_area(t('description'))
             price = st.number_input(t('price'), min_value=0.0, value=0.0)
             cat = st.selectbox(t('category'), [t('clothing'), t('binoculars'), t('caller'), t('weapon'), t('accessory'), t('other')])
-            contact = st.text_input(t('contact')+"*")
+            contact = st.text_input(f"{t('contact')}*")
             photo_ad = st.file_uploader(t('photo'), type=["jpg","jpeg","png"])
             if st.form_submit_button(t('publish')):
                 if not title or not contact:
@@ -855,7 +898,7 @@ def show_ia_recognition_page():
             bytes_data = uploaded.getvalue()
             sugg = recognize_species_inaturalist(bytes_data)
             if sugg:
-                st.success("iNaturalist:")
+                st.success("iNaturalist :")
                 for s in sugg:
                     st.write(f"- {s}")
                 first = sugg[0].split('(')[0].strip()
@@ -863,10 +906,7 @@ def show_ia_recognition_page():
                     st.session_state['ia_species'] = first
                     st.info(f"Espèce mise à jour : {first}")
             else:
-                st.info("iNaturalist indisponible, modèle local:")
-                local = recognize_species_local(img)
-                for s in local:
-                    st.write(f"- {s}")
+                st.warning("L'API iNaturalist n'est pas accessible. Veuillez saisir l'espèce manuellement.")
 
 def show_ia_recommendations_page():
     st.title(t('ai_recs'))
@@ -876,7 +916,8 @@ def show_ia_recommendations_page():
         return
     st.subheader(t('density_map'))
     fig = px.density_mapbox(df, lat='latitude', lon='longitude', z='id',
-                            radius=10, center=dict(lat=df['latitude'].mean(), lon=df['longitude'].mean()),
+                            radius=10,
+                            center=dict(lat=df['latitude'].mean(), lon=df['longitude'].mean()),
                             zoom=8, mapbox_style="stamen-terrain")
     st.plotly_chart(fig, use_container_width=True)
     st.subheader(t('clustering'))
@@ -886,7 +927,7 @@ def show_ia_recommendations_page():
         for _, r in df.iterrows():
             folium.CircleMarker([r['latitude'], r['longitude']], radius=3, color='red', fill=True).add_to(m)
         for i, c in enumerate(centers):
-            folium.CircleMarker([c[0], c[1]], radius=8+counts[i]*2, color='blue', fill=True,
+            folium.CircleMarker([c[0], c[1]], radius=8 + counts[i]*2, color='blue', fill=True,
                                 popup=f"{t('zone')} {i+1} : {counts[i]} {t('observations_count')}").add_to(m)
         folium_static(m, width=1000, height=600)
     else:
@@ -916,14 +957,15 @@ def show_admin_page():
 # 13. MAIN
 # ---------------------------
 def main():
-    # Sélecteur de langue dans la sidebar (toujours visible)
+    # Sélecteur de langue dans la sidebar
     lang_map = {'Français': 'fr', 'English': 'en', 'العربية': 'ar'}
     current_lang_name = [k for k, v in lang_map.items() if v == st.session_state.lang][0]
-    selected = st.sidebar.selectbox(t('lang_selector'), list(lang_map.keys()), index=list(lang_map.keys()).index(current_lang_name))
+    selected = st.sidebar.selectbox(t('lang_selector'), list(lang_map.keys()),
+                                    index=list(lang_map.keys()).index(current_lang_name))
     if lang_map[selected] != st.session_state.lang:
         st.session_state.lang = lang_map[selected]
         st.experimental_rerun()
-    
+
     if not st.session_state.logged_in:
         login_page()
     else:
@@ -932,17 +974,25 @@ def main():
         if st.session_state.email == ADMIN_EMAIL:
             pages.append(t('admin'))
         page = st.sidebar.radio(t('navigation'), pages)
-        
-        # Appel des pages
-        if page == t('my_obs'): show_observations_page()
-        elif page == t('map'): show_carte_page()
-        elif page == t('stats'): show_stats_page()
-        elif page == t('chat'): show_chat_page()
-        elif page == t('ads'): show_annonces_page()
-        elif page == t('profile'): show_profile_page()
-        elif page == t('ai_recog'): show_ia_recognition_page()
-        elif page == t('ai_recs'): show_ia_recommendations_page()
-        elif page == t('admin'): show_admin_page()
+
+        if page == t('my_obs'):
+            show_observations_page()
+        elif page == t('map'):
+            show_carte_page()
+        elif page == t('stats'):
+            show_stats_page()
+        elif page == t('chat'):
+            show_chat_page()
+        elif page == t('ads'):
+            show_annonces_page()
+        elif page == t('profile'):
+            show_profile_page()
+        elif page == t('ai_recog'):
+            show_ia_recognition_page()
+        elif page == t('ai_recs'):
+            show_ia_recommendations_page()
+        elif page == t('admin'):
+            show_admin_page()
 
 if __name__ == "__main__":
     main()
